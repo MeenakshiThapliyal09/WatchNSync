@@ -1,15 +1,30 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useParams } from 'react-router'
 import { LinkIcon, PlayIcon } from '../components/icons'
 import { socket } from '../services/socket'
 
+function getUsername(state: unknown): string | undefined {
+  if (typeof state !== 'object' || state === null) {
+    return undefined
+  }
+
+  const { username } = state as Record<string, unknown>
+  return typeof username === 'string' && username.trim() ? username.trim() : undefined
+}
+
 export function RoomPage() {
   const { roomId } = useParams()
+  const { state } = useLocation()
+  const username = getUsername(state)
   const [isConnected, setIsConnected] = useState(socket.connected)
 
   useEffect(() => {
     function handleConnect() {
       setIsConnected(true)
+
+      if (roomId && username) {
+        socket.emit('join_room', { roomId, username })
+      }
     }
 
     function handleDisconnect() {
@@ -18,14 +33,19 @@ export function RoomPage() {
 
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
-    socket.connect()
+
+    if (socket.connected) {
+      handleConnect()
+    } else {
+      socket.connect()
+    }
 
     return () => {
       socket.off('connect', handleConnect)
       socket.off('disconnect', handleDisconnect)
       socket.disconnect()
     }
-  }, [])
+  }, [roomId, username])
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
