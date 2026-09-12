@@ -3,6 +3,12 @@ import { Link, useLocation, useParams } from 'react-router'
 import { LinkIcon, PlayIcon } from '../components/icons'
 import { socket } from '../services/socket'
 
+interface SyncState {
+  videoId: string | null
+  playState: 'paused' | 'playing'
+  currentTime: number
+}
+
 function getUsername(state: unknown): string | undefined {
   if (typeof state !== 'object' || state === null) {
     return undefined
@@ -17,6 +23,7 @@ export function RoomPage() {
   const { state } = useLocation()
   const username = getUsername(state)
   const [isConnected, setIsConnected] = useState(socket.connected)
+  const [, setSyncState] = useState<SyncState | null>(null)
 
   useEffect(() => {
     function handleConnect() {
@@ -31,8 +38,13 @@ export function RoomPage() {
       setIsConnected(false)
     }
 
+    function handleSyncState(receivedState: SyncState) {
+      setSyncState(receivedState)
+    }
+
     socket.on('connect', handleConnect)
     socket.on('disconnect', handleDisconnect)
+    socket.on('sync_state', handleSyncState)
 
     if (socket.connected) {
       handleConnect()
@@ -43,6 +55,7 @@ export function RoomPage() {
     return () => {
       socket.off('connect', handleConnect)
       socket.off('disconnect', handleDisconnect)
+      socket.off('sync_state', handleSyncState)
       socket.disconnect()
     }
   }, [roomId, username])
