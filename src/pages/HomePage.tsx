@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { ArrowRightIcon, LinkIcon, PlayIcon, UsersIcon } from '../components/icons'
 
 const steps = [
@@ -8,8 +8,15 @@ const steps = [
 ]
 
 export function HomePage() {
+  const { state } = useLocation()
+  const message = typeof state === 'object' && state !== null && 'message' in state
+    && typeof state.message === 'string'
+    ? state.message
+    : undefined
+
   return (
     <div>
+      {message && <p aria-live="polite" className="mx-auto max-w-6xl px-4 pt-6 text-sm font-medium text-emerald-700 sm:px-6 lg:px-8">{message}</p>}
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-8">
           <div className="max-w-2xl">

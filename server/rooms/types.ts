@@ -22,4 +22,5 @@ export interface Room {
   roomId: string
   participants: Map<string, Participant>
   playbackState: SharedPlaybackState
+  moderatorsCanManageParticipants: boolean
 }

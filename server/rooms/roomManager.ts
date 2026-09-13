@@ -23,6 +23,7 @@ export class RoomManager {
       roomId,
       participants: new Map(),
       playbackState: createInitialPlaybackState(),
+      moderatorsCanManageParticipants: false,
     }
 
     this.rooms.set(roomId, room)
@@ -78,6 +79,37 @@ export class RoomManager {
 
     participant.role = role
     return participant
+  }
+
+  transferHost(roomId: string, userId: string): Participant[] | undefined {
+    const room = this.rooms.get(roomId)
+    const target = room?.participants.get(userId)
+    const currentHost = room && [...room.participants.values()].find((participant) => (
+      participant.role === 'Host'
+    ))
+
+    if (!room || !target || !currentHost || target.userId === currentHost.userId) {
+      return undefined
+    }
+
+    currentHost.role = 'Participant'
+    target.role = 'Host'
+    return [...room.participants.values()]
+  }
+
+  setModeratorsCanManageParticipants(roomId: string, enabled: boolean): boolean {
+    const room = this.rooms.get(roomId)
+
+    if (!room) {
+      return false
+    }
+
+    room.moderatorsCanManageParticipants = enabled
+    return true
+  }
+
+  endRoom(roomId: string): boolean {
+    return this.rooms.delete(roomId)
   }
 
   updatePlaybackState(

@@ -1,17 +1,35 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 import { ArrowRightIcon, LinkIcon } from '../components/icons'
 
 export function JoinRoomPage() {
   const navigate = useNavigate()
-  const [roomId, setRoomId] = useState('')
+  const location = useLocation()
+  const [roomId, setRoomId] = useState(() => new URLSearchParams(location.search).get('roomId') ?? '')
   const [username, setUsername] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => {
+    const state = location.state
+    return typeof state === 'object' && state !== null && 'error' in state && typeof state.error === 'string'
+      ? state.error
+      : ''
+  })
+
+  function getRoomId(value: string) {
+    const trimmedValue = value.trim()
+
+    try {
+      const url = new URL(trimmedValue)
+      const match = url.pathname.match(/^\/room\/([^/]+)$/)
+      return match ? decodeURIComponent(match[1]) : trimmedValue
+    } catch {
+      return trimmedValue
+    }
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    const trimmedRoomId = roomId.trim()
+    const trimmedRoomId = getRoomId(roomId)
     const trimmedUsername = username.trim()
 
     if (!trimmedRoomId || !trimmedUsername) {

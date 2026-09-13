@@ -63,16 +63,24 @@ function applyPlaybackState(player: YT.Player, playState: YouTubePlayerProps['pl
   }
 }
 
-export function YouTubePlayer({ videoId, playState, currentTime, onReady, onStateChange }: YouTubePlayerProps) {
+export function YouTubePlayer({
+  videoId,
+  playState,
+  currentTime,
+  onReady,
+  onStateChange,
+}: YouTubePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const playerRef = useRef<YT.Player | null>(null)
   const playerVideoIdRef = useRef<string | null>(null)
   const isPlayerReadyRef = useRef(false)
   const callbacksRef = useRef({ onReady, onStateChange })
+  const playbackStateRef = useRef({ playState, currentTime })
   const [hasLoadError, setHasLoadError] = useState(false)
   const resolvedVideoId = extractYouTubeVideoId(videoId)
 
   callbacksRef.current = { onReady, onStateChange }
+  playbackStateRef.current = { playState, currentTime }
 
   useEffect(() => {
     if (!resolvedVideoId || !containerRef.current) {
@@ -95,7 +103,12 @@ export function YouTubePlayer({ videoId, playState, currentTime, onReady, onStat
           }
 
           if (isPlayerReadyRef.current) {
-            applyPlaybackState(playerRef.current, playState, currentTime)
+            const playbackState = playbackStateRef.current
+            applyPlaybackState(
+              playerRef.current,
+              playbackState.playState,
+              playbackState.currentTime,
+            )
           }
           return
         }
@@ -115,7 +128,12 @@ export function YouTubePlayer({ videoId, playState, currentTime, onReady, onStat
               playerRef.current = event.target
               playerVideoIdRef.current = resolvedVideoId
               isPlayerReadyRef.current = true
-              applyPlaybackState(event.target, playState, currentTime)
+              const playbackState = playbackStateRef.current
+              applyPlaybackState(
+                event.target,
+                playbackState.playState,
+                playbackState.currentTime,
+              )
               callbacksRef.current.onReady?.(event.target)
             },
             onStateChange: (event) => callbacksRef.current.onStateChange?.({
