@@ -53,6 +53,33 @@ function getValidCurrentTime(payload: unknown): number | undefined {
     : undefined
 }
 
+function getRoleAssignment(payload: unknown): { userId: string; role: typeof RoomRole.Moderator | typeof RoomRole.Participant } | undefined {
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined
+  }
+
+  const { userId, role } = payload as Record<string, unknown>
+
+  if (
+    typeof userId !== 'string' ||
+    !userId.trim() ||
+    (role !== RoomRole.Moderator && role !== RoomRole.Participant)
+  ) {
+    return undefined
+  }
+
+  return { userId, role }
+}
+
+function getTargetUserId(payload: unknown): string | undefined {
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined
+  }
+
+  const { userId } = payload as Record<string, unknown>
+  return typeof userId === 'string' && userId.trim() ? userId : undefined
+}
+
 export function configureSocketServer(httpServer: HttpServer, roomManager = new RoomManager()) {
   const socketRoomIds = new Map<string, string>()
   const io = new Server(httpServer, {
@@ -95,6 +122,19 @@ export function configureSocketServer(httpServer: HttpServer, roomManager = new 
 
       const participant = roomManager.getRoom(roomId)?.participants.get(socket.id)
       return participant?.role === RoomRole.Host ? roomId : undefined
+    }
+
+    const getPlaybackRoomId = () => {
+      const roomId = socketRoomIds.get(socket.id)
+
+      if (!roomId) {
+        return undefined
+      }
+
+      const participant = roomManager.getRoom(roomId)?.participants.get(socket.id)
+      return participant?.role === RoomRole.Host || participant?.role === RoomRole.Moderator
+        ? roomId
+        : undefined
     }
 
     const broadcastSyncState = (roomId: string) => {
@@ -154,8 +194,64 @@ export function configureSocketServer(httpServer: HttpServer, roomManager = new 
       leaveCurrentRoom()
     })
 
-    socket.on('change_video', (payload: unknown) => {
+    socket.on('assign_role', (payload: unknown) => {
       const roomId = getHostRoomId()
+      const assignment = getRoleAssignment(payload)
+
+      if (!roomId || !assignment) {
+        return
+      }
+
+      const target = roomManager.getRoom(roomId)?.participants.get(assignment.userId)
+
+      if (!target || target.role === RoomRole.Host) {
+        return
+      }
+
+      const participant = roomManager.updateParticipantRole(roomId, assignment.userId, assignment.role)
+
+      if (participant) {
+        io.to(roomId).emit('role_assigned', {
+          userId: participant.userId,
+          username: participant.username,
+          role: participant.role,
+          participants: roomManager.listParticipants(roomId),
+        })
+      }
+    })
+
+    socket.on('remove_participant', (payload: unknown) => {
+      const roomId = getHostRoomId()
+      const userId = getTargetUserId(payload)
+
+      if (!roomId || !userId) {
+        return
+      }
+
+      const participant = roomManager.getRoom(roomId)?.participants.get(userId)
+
+      if (!participant || participant.role === RoomRole.Host) {
+        return
+      }
+
+      const removedSocket = io.sockets.sockets.get(userId)
+      roomManager.removeParticipant(roomId, userId)
+      socketRoomIds.delete(userId)
+      removedSocket?.leave(roomId)
+
+      const removal = {
+        userId: participant.userId,
+        username: participant.username,
+        role: participant.role,
+        participants: roomManager.listParticipants(roomId),
+      }
+
+      removedSocket?.emit('participant_removed', removal)
+      io.to(roomId).emit('participant_removed', removal)
+    })
+
+    socket.on('change_video', (payload: unknown) => {
+      const roomId = getPlaybackRoomId()
       const videoId = getValidVideoId(payload)
 
       if (!roomId || !videoId) {
@@ -171,7 +267,7 @@ export function configureSocketServer(httpServer: HttpServer, roomManager = new 
     })
 
     socket.on('play', (payload: unknown) => {
-      const roomId = getHostRoomId()
+      const roomId = getPlaybackRoomId()
 
       if (!roomId) {
         return
@@ -186,7 +282,7 @@ export function configureSocketServer(httpServer: HttpServer, roomManager = new 
     })
 
     socket.on('pause', (payload: unknown) => {
-      const roomId = getHostRoomId()
+      const roomId = getPlaybackRoomId()
 
       if (!roomId) {
         return
@@ -201,7 +297,7 @@ export function configureSocketServer(httpServer: HttpServer, roomManager = new 
     })
 
     socket.on('seek', (payload: unknown) => {
-      const roomId = getHostRoomId()
+      const roomId = getPlaybackRoomId()
       const currentTime = getValidCurrentTime(payload)
 
       if (!roomId || currentTime === undefined) {

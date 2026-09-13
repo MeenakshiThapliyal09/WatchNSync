@@ -13,7 +13,7 @@ interface SyncState {
 interface RoomParticipant {
   userId: string
   username: string
-  role: 'Host' | 'Participant'
+  role: 'Host' | 'Moderator' | 'Participant'
 }
 
 interface ParticipantUpdate {
@@ -46,6 +46,11 @@ export function RoomPage() {
   const playerRef = useRef<YT.Player | null>(null)
   const isHost = participants.some((participant) => (
     participant.userId === socket.id && participant.role === 'Host'
+  ))
+  const isPartyController = participants.some((participant) => (
+    participant.userId === socket.id && (
+      participant.role === 'Host' || participant.role === 'Moderator'
+    )
   ))
 
   function getCurrentTime() {
@@ -88,7 +93,7 @@ export function RoomPage() {
   function handleSeek(currentTime: number) {
     setPlayerProgress((progress) => ({ ...progress, currentTime }))
 
-    if (isHost) {
+    if (isPartyController) {
       socket.emit('seek', { currentTime })
     } else {
       playerRef.current?.seekTo(currentTime, true)
@@ -121,6 +126,8 @@ export function RoomPage() {
     socket.on('sync_state', handleSyncState)
     socket.on('user_joined', handleParticipantUpdate)
     socket.on('user_left', handleParticipantUpdate)
+    socket.on('role_assigned', handleParticipantUpdate)
+    socket.on('participant_removed', handleParticipantUpdate)
 
     if (socket.connected) {
       handleConnect()
@@ -134,6 +141,8 @@ export function RoomPage() {
       socket.off('sync_state', handleSyncState)
       socket.off('user_joined', handleParticipantUpdate)
       socket.off('user_left', handleParticipantUpdate)
+      socket.off('role_assigned', handleParticipantUpdate)
+      socket.off('participant_removed', handleParticipantUpdate)
       socket.disconnect()
     }
   }, [roomId, username])
@@ -144,7 +153,7 @@ export function RoomPage() {
   }, [isScrubbing, syncState?.videoId])
 
   const hasVideo = Boolean(syncState?.videoId)
-  const controlTitle = isHost ? 'Party controls' : 'Local controls'
+  const controlTitle = isPartyController ? 'Party controls' : 'Local controls'
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
@@ -162,7 +171,7 @@ export function RoomPage() {
           />
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-950">{controlTitle}</h2>
-            {isHost && (
+            {isPartyController && (
               <>
                 <form className="mt-3 flex flex-col gap-3 sm:flex-row" onSubmit={handleVideoSubmit}>
                   <label className="sr-only" htmlFor="video-input">YouTube URL or video ID</label>
@@ -173,13 +182,13 @@ export function RoomPage() {
               </>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
-              <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" disabled={!hasVideo} onClick={() => isHost ? socket.emit('play', { currentTime: getCurrentTime() }) : playerRef.current?.playVideo()} type="button">{isHost ? 'Play for everyone' : 'Play locally'}</button>
-              <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" disabled={!hasVideo} onClick={() => isHost ? socket.emit('pause', { currentTime: getCurrentTime() }) : playerRef.current?.pauseVideo()} type="button">{isHost ? 'Pause for everyone' : 'Pause locally'}</button>
+              <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" disabled={!hasVideo} onClick={() => isPartyController ? socket.emit('play', { currentTime: getCurrentTime() }) : playerRef.current?.playVideo()} type="button">{isPartyController ? 'Play for everyone' : 'Play locally'}</button>
+              <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" disabled={!hasVideo} onClick={() => isPartyController ? socket.emit('pause', { currentTime: getCurrentTime() }) : playerRef.current?.pauseVideo()} type="button">{isPartyController ? 'Pause for everyone' : 'Pause locally'}</button>
             </div>
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between text-xs text-slate-500"><span>{formatTime(playerProgress.currentTime)}</span><span>{formatTime(playerProgress.duration)}</span></div>
               <label className="sr-only" htmlFor="playback-progress">Playback position</label>
-              <input aria-label={isHost ? 'Party playback position' : 'Local playback position'} className="h-2 w-full cursor-pointer accent-sky-700" disabled={!hasVideo || playerProgress.duration === 0} id="playback-progress" max={playerProgress.duration || 0} min="0" onChange={(event) => handleSeek(Number(event.target.value))} onPointerDown={() => setIsScrubbing(true)} onPointerUp={() => setIsScrubbing(false)} step="0.1" type="range" value={Math.min(playerProgress.currentTime, playerProgress.duration || 0)} />
+              <input aria-label={isPartyController ? 'Party playback position' : 'Local playback position'} className="h-2 w-full cursor-pointer accent-sky-700" disabled={!hasVideo || playerProgress.duration === 0} id="playback-progress" max={playerProgress.duration || 0} min="0" onChange={(event) => handleSeek(Number(event.target.value))} onPointerDown={() => setIsScrubbing(true)} onPointerUp={() => setIsScrubbing(false)} step="0.1" type="range" value={Math.min(playerProgress.currentTime, playerProgress.duration || 0)} />
             </div>
           </section>
         </div>
@@ -195,7 +204,15 @@ export function RoomPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-slate-900">{participant.username}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${participant.role === 'Host' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-600'}`}>{participant.role}</span>
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${participant.role === 'Host' ? 'bg-sky-100 text-sky-800' : participant.role === 'Moderator' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{participant.role}</span>
+                    {isHost && participant.userId !== socket.id && participant.role !== 'Host' && (
+                      <>
+                        <button className="text-xs font-semibold text-sky-700 hover:text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" onClick={() => socket.emit('assign_role', { userId: participant.userId, role: participant.role === 'Participant' ? 'Moderator' : 'Participant' })} type="button">{participant.role === 'Participant' ? 'Make moderator' : 'Make participant'}</button>
+                        <button className="text-xs font-semibold text-red-700 hover:text-red-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={() => socket.emit('remove_participant', { userId: participant.userId })} type="button">Remove</button>
+                      </>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

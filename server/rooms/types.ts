@@ -1,5 +1,6 @@
 export const RoomRole = {
   Host: 'Host',
+  Moderator: 'Moderator',
   Participant: 'Participant',
 } as const
 
