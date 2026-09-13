@@ -1,7 +1,9 @@
 declare namespace YT {
   interface Player {
+    cueVideoById(videoId: string, startSeconds?: number): void
     destroy(): void
     getCurrentTime(): number
+    getDuration(): number
     getPlayerState(): number
     pauseVideo(): void
     playVideo(): void

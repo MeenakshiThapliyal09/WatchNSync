@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { Participant, Room } from './types.js'
+import type { Participant, Room, SharedPlaybackState } from './types.js'
 
 function createInitialPlaybackState(): Room['playbackState'] {
   return {
@@ -63,6 +63,24 @@ export class RoomManager {
   listParticipants(roomId: string): Participant[] {
     const room = this.rooms.get(roomId)
     return room ? [...room.participants.values()] : []
+  }
+
+  updatePlaybackState(
+    roomId: string,
+    update: Partial<SharedPlaybackState>,
+  ): SharedPlaybackState | undefined {
+    const room = this.rooms.get(roomId)
+
+    if (!room) {
+      return undefined
+    }
+
+    room.playbackState = {
+      ...room.playbackState,
+      ...update,
+    }
+
+    return room.playbackState
   }
 
   deleteEmptyRoom(roomId: string): boolean {

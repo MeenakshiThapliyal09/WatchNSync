@@ -29,6 +29,30 @@ function isValidJoinRoomPayload(payload: unknown): payload is JoinRoomPayload {
   )
 }
 
+function getValidVideoId(payload: unknown): string | undefined {
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined
+  }
+
+  const { videoId } = payload as Record<string, unknown>
+
+  return typeof videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(videoId)
+    ? videoId
+    : undefined
+}
+
+function getValidCurrentTime(payload: unknown): number | undefined {
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined
+  }
+
+  const { currentTime } = payload as Record<string, unknown>
+
+  return typeof currentTime === 'number' && Number.isFinite(currentTime) && currentTime >= 0
+    ? currentTime
+    : undefined
+}
+
 export function configureSocketServer(httpServer: HttpServer, roomManager = new RoomManager()) {
   const socketRoomIds = new Map<string, string>()
   const io = new Server(httpServer, {
@@ -59,6 +83,25 @@ export function configureSocketServer(httpServer: HttpServer, roomManager = new 
           role: participant.role,
           participants: roomManager.listParticipants(roomId),
         })
+      }
+    }
+
+    const getHostRoomId = () => {
+      const roomId = socketRoomIds.get(socket.id)
+
+      if (!roomId) {
+        return undefined
+      }
+
+      const participant = roomManager.getRoom(roomId)?.participants.get(socket.id)
+      return participant?.role === RoomRole.Host ? roomId : undefined
+    }
+
+    const broadcastSyncState = (roomId: string) => {
+      const room = roomManager.getRoom(roomId)
+
+      if (room) {
+        io.to(roomId).emit('sync_state', room.playbackState)
       }
     }
 
@@ -109,6 +152,64 @@ export function configureSocketServer(httpServer: HttpServer, roomManager = new 
 
     socket.on('leave_room', () => {
       leaveCurrentRoom()
+    })
+
+    socket.on('change_video', (payload: unknown) => {
+      const roomId = getHostRoomId()
+      const videoId = getValidVideoId(payload)
+
+      if (!roomId || !videoId) {
+        return
+      }
+
+      roomManager.updatePlaybackState(roomId, {
+        videoId,
+        playState: 'paused',
+        currentTime: 0,
+      })
+      broadcastSyncState(roomId)
+    })
+
+    socket.on('play', (payload: unknown) => {
+      const roomId = getHostRoomId()
+
+      if (!roomId) {
+        return
+      }
+
+      const currentTime = getValidCurrentTime(payload)
+      roomManager.updatePlaybackState(roomId, {
+        playState: 'playing',
+        ...(currentTime === undefined ? {} : { currentTime }),
+      })
+      broadcastSyncState(roomId)
+    })
+
+    socket.on('pause', (payload: unknown) => {
+      const roomId = getHostRoomId()
+
+      if (!roomId) {
+        return
+      }
+
+      const currentTime = getValidCurrentTime(payload)
+      roomManager.updatePlaybackState(roomId, {
+        playState: 'paused',
+        ...(currentTime === undefined ? {} : { currentTime }),
+      })
+      broadcastSyncState(roomId)
+    })
+
+    socket.on('seek', (payload: unknown) => {
+      const roomId = getHostRoomId()
+      const currentTime = getValidCurrentTime(payload)
+
+      if (!roomId || currentTime === undefined) {
+        return
+      }
+
+      roomManager.updatePlaybackState(roomId, { currentTime })
+      broadcastSyncState(roomId)
     })
 
     socket.on('disconnect', (reason) => {
