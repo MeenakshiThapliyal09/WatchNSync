@@ -33,11 +33,6 @@ function getUsername(state: unknown): string | undefined {
   return typeof username === 'string' && username.trim() ? username.trim() : undefined
 }
 
-function shouldShowShareLink(state: unknown): boolean {
-  return typeof state === 'object' && state !== null
-    && (state as Record<string, unknown>).showShareLink === true
-}
-
 export function RoomPage() {
   const { roomId } = useParams()
   const { state } = useLocation()
@@ -62,6 +57,7 @@ export function RoomPage() {
     )
   ))
   const canManageParticipants = isHost || (isPartyController && moderatorsCanManageParticipants)
+  const hostName = participants.find((participant) => participant.role === 'Host')?.username ?? 'Host'
 
   useEffect(() => {
     if (roomId && !username) {
@@ -113,6 +109,20 @@ export function RoomPage() {
       socket.emit('seek', { currentTime })
     } else {
       playerRef.current?.seekTo(currentTime, true)
+    }
+
+  }
+
+  function handleSync() {
+    if (!playerRef.current || !syncState) {
+      return
+    }
+
+    playerRef.current.seekTo(syncState.currentTime, true)
+    if (syncState.playState === 'playing') {
+      playerRef.current.playVideo()
+    } else {
+      playerRef.current.pauseVideo()
     }
   }
 
@@ -218,18 +228,19 @@ export function RoomPage() {
   }
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-semibold tracking-wide text-sky-700">WATCH ROOM</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Room {roomId}</h1></div><span aria-live="polite" className={`rounded-full border px-3 py-1 text-sm ${isConnected ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600'}`}>{isConnected ? 'Connected' : 'Not connected'}</span></div>
-      {shouldShowShareLink(state) && (
-        <section className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-          <p className="text-sm font-semibold text-emerald-900">Your room is ready to share</p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <input aria-label="Shareable room link" className="min-w-0 flex-1 rounded-md border border-emerald-300 bg-white px-3 py-2 text-sm text-slate-700" readOnly value={shareLink} />
-            <button className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" onClick={handleCopyLink} type="button">Copy link</button>
+    <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0"><p className="text-xs font-semibold tracking-[0.2em] text-[#c45a67]">WATCH ROOM</p><h1 className="mt-2 break-words text-3xl font-black tracking-tight text-white sm:text-4xl">{hostName}'s Room</h1><p className="mt-2 text-sm text-slate-400">A shared screen for the whole crew.</p></div>
+        <span aria-live="polite" className={`rounded-md border px-3 py-2 text-sm ${isConnected ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300' : 'border-slate-700 bg-slate-900 text-slate-400'}`}>{isConnected ? 'Connected' : 'Not connected'}</span>
+      </div>
+      <section className="mb-6 rounded-xl border border-slate-800 bg-gradient-to-b from-[#141923] to-[#101722] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-white">Share this room</p><p className="mt-1 text-xs text-slate-500">Send the link, or share the code below.</p></div><span className="w-fit max-w-full break-all rounded-md border border-[#5d2028] bg-[#2a151a] px-3 py-2 font-mono text-sm font-bold tracking-wide text-[#e0a0a8]">Room code: {roomId}</span></div>
+          <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row">
+            <input aria-label="Shareable room link" className="min-w-0 w-full rounded-md border border-slate-700 bg-[#0b1018] px-3 py-2 text-sm text-slate-300" readOnly value={shareLink} />
+            <button className="w-full shrink-0 rounded-md bg-[#8f1d2c] px-4 py-2 text-sm font-bold text-white hover:bg-[#a72b3b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c45a67] sm:w-auto" onClick={handleCopyLink} type="button">Copy link</button>
           </div>
-          {copyFeedback && <p aria-live="polite" className="mt-2 text-sm font-medium text-emerald-800">{copyFeedback}</p>}
-        </section>
-      )}
+          {copyFeedback && <p aria-live="polite" className="mt-2 text-sm font-medium text-emerald-300">{copyFeedback}</p>}
+      </section>
       <div className="grid gap-6 lg:grid-cols-[1.6fr_0.8fr]">
         <div className="space-y-4">
           <YouTubePlayer
@@ -241,46 +252,46 @@ export function RoomPage() {
             playState={syncState?.playState ?? 'paused'}
             videoId={syncState?.videoId}
           />
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-950">{controlTitle}</h2>
+          <section className="rounded-xl border border-slate-800 bg-gradient-to-b from-[#141923] to-[#101722] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-sm font-semibold text-white">{controlTitle}</h2>{!isPartyController && <button className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-red-400 hover:text-red-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400" disabled={!hasVideo} onClick={handleSync} type="button">Sync now</button>}</div>
             {isPartyController && (
               <>
                 <form className="mt-3 flex flex-col gap-3 sm:flex-row" onSubmit={handleVideoSubmit}>
                   <label className="sr-only" htmlFor="video-input">YouTube URL or video ID</label>
-                  <input className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-700 focus:outline-2 focus:outline-offset-2 focus:outline-sky-700" id="video-input" onChange={(event) => setVideoInput(event.target.value)} placeholder="Paste a YouTube URL or video ID" type="text" value={videoInput} />
-                  <button className="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" type="submit">Set party video</button>
+                  <input className="min-w-0 flex-1 rounded-md border border-slate-700 bg-[#0b1018] px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-[#c45a67] focus:outline-2 focus:outline-offset-2 focus:outline-[#c45a67]" id="video-input" onChange={(event) => setVideoInput(event.target.value)} placeholder="Paste a YouTube URL or video ID" type="text" value={videoInput} />
+                  <button className="w-full shrink-0 rounded-md bg-[#8f1d2c] px-4 py-2 text-sm font-bold text-white hover:bg-[#a72b3b] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c45a67] sm:w-auto" type="submit">Set party video</button>
                 </form>
                 {videoError && <p className="mt-2 text-sm text-red-700" role="alert">{videoError}</p>}
               </>
             )}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" disabled={!hasVideo} onClick={() => isPartyController ? socket.emit('play', { currentTime: getCurrentTime() }) : playerRef.current?.playVideo()} type="button">{isPartyController ? 'Play for everyone' : 'Play locally'}</button>
-              <button className="rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" disabled={!hasVideo} onClick={() => isPartyController ? socket.emit('pause', { currentTime: getCurrentTime() }) : playerRef.current?.pauseVideo()} type="button">{isPartyController ? 'Pause for everyone' : 'Pause locally'}</button>
-            </div>
-            <div className="mt-4">
+            {isPartyController && <div className="mt-4 flex flex-wrap gap-2">
+              <button className="rounded-md bg-[#8f1d2c] px-4 py-2 text-sm font-bold text-white hover:bg-[#a72b3b] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c45a67]" disabled={!hasVideo} onClick={() => socket.emit('play', { currentTime: getCurrentTime() })} type="button">Play for everyone</button>
+              <button className="rounded-md border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 hover:border-slate-400 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c45a67]" disabled={!hasVideo} onClick={() => socket.emit('pause', { currentTime: getCurrentTime() })} type="button">Pause for everyone</button>
+            </div>}
+            {isPartyController && <div className="mt-4">
               <div className="mb-2 flex items-center justify-between text-xs text-slate-500"><span>{formatTime(playerProgress.currentTime)}</span><span>{formatTime(playerProgress.duration)}</span></div>
               <label className="sr-only" htmlFor="playback-progress">Playback position</label>
-              <input aria-label={isPartyController ? 'Party playback position' : 'Local playback position'} className="h-2 w-full cursor-pointer accent-sky-700" disabled={!hasVideo || playerProgress.duration === 0} id="playback-progress" max={playerProgress.duration || 0} min="0" onChange={(event) => handleSeek(Number(event.target.value))} onPointerDown={() => setIsScrubbing(true)} onPointerUp={() => setIsScrubbing(false)} step="0.1" type="range" value={Math.min(playerProgress.currentTime, playerProgress.duration || 0)} />
-            </div>
+              <input aria-label="Party playback position" className="h-2 w-full cursor-pointer accent-[#8f1d2c]" disabled={!hasVideo || playerProgress.duration === 0} id="playback-progress" max={playerProgress.duration || 0} min="0" onChange={(event) => handleSeek(Number(event.target.value))} onPointerDown={() => setIsScrubbing(true)} onPointerUp={() => setIsScrubbing(false)} step="0.1" type="range" value={Math.min(playerProgress.currentTime, playerProgress.duration || 0)} />
+            </div>}
           </section>
         </div>
-        <aside className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <UsersIcon className="size-6 text-sky-700" />
-          <h2 className="mt-4 font-semibold text-slate-950">Participants</h2>
+        <aside className="rounded-xl border border-slate-800 bg-gradient-to-b from-[#141923] to-[#101722] p-6">
+          <UsersIcon className="size-6 text-red-400" />
+          <h2 className="mt-4 font-semibold text-white">Participants</h2>
           {participants.length === 0 ? (
-            <p className="mt-2 text-sm leading-6 text-slate-600">No one has joined this room yet.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-400">No one has joined this room yet.</p>
           ) : (
             <ul className="mt-4 space-y-3">
               {participants.map((participant) => (
-                <li key={participant.userId} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2.5">
+                <li key={participant.userId} className="flex min-w-0 flex-col items-start gap-2 rounded-lg border border-slate-800 bg-[#0b1018] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{participant.username}</p>
+                    <p className="truncate text-sm font-medium text-slate-200">{participant.username}</p>
                   </div>
-                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${participant.role === 'Host' ? 'bg-sky-100 text-sky-800' : participant.role === 'Moderator' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{participant.role}</span>
+                  <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
+                    <span className={`rounded-md px-2 py-1 text-xs font-semibold ${participant.role === 'Host' ? 'bg-red-950 text-red-300' : participant.role === 'Moderator' ? 'bg-amber-950 text-amber-300' : 'bg-slate-800 text-slate-400'}`}>{participant.role}</span>
                     {canManageParticipants && participant.userId !== socket.id && participant.role !== 'Host' && (
                       <>
-                        <button className="text-xs font-semibold text-sky-700 hover:text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700" onClick={() => socket.emit('assign_role', { userId: participant.userId, role: participant.role === 'Participant' ? 'Moderator' : 'Participant' })} type="button">{participant.role === 'Participant' ? 'Make moderator' : 'Make participant'}</button>
+                        <button className="text-xs font-semibold text-red-300 hover:text-red-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400" onClick={() => socket.emit('assign_role', { userId: participant.userId, role: participant.role === 'Participant' ? 'Moderator' : 'Participant' })} type="button">{participant.role === 'Participant' ? 'Make moderator' : 'Make participant'}</button>
                         {isHost && <button className="text-xs font-semibold text-slate-700 hover:text-slate-900" onClick={() => socket.emit('transfer_host', { userId: participant.userId })} type="button">Make host</button>}
                         <button className="text-xs font-semibold text-red-700 hover:text-red-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" onClick={() => socket.emit('remove_participant', { userId: participant.userId })} type="button">Remove</button>
                       </>
@@ -299,7 +310,7 @@ export function RoomPage() {
               Allow moderators to manage participants
             </label>
           )}
-          <button className="mt-6 text-sm font-semibold text-sky-700 hover:text-sky-900" onClick={() => { socket.emit('leave_room'); navigate('/') }} type="button">Leave room</button>
+          <button className="mt-6 text-sm font-semibold text-red-300 hover:text-red-200" onClick={() => { socket.emit('leave_room'); navigate('/') }} type="button">Leave room</button>
         </aside>
       </div>
     </section>
